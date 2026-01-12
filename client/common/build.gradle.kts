@@ -15,7 +15,10 @@ plugins {
 
 group = "calebxzhou.rdi.client.common"
 version = "0.1"
-
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
 dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
 }

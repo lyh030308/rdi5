@@ -25,6 +25,7 @@ tasks.named<Wrapper>("wrapper") {
 
 repositories {
     mavenLocal()
+    mavenCentral()
     exclusiveContent {
         forRepository {
             maven {

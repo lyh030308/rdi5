@@ -96,7 +96,10 @@ class WardrobeFragment : RFragment("衣柜") {
                         }
                     },
                 )
-                button("导入正版", onClick = { (MojangSkinFragment().go()) })
+                button("" +
+                        "" +
+                        "" +
+                        "导入正版", onClick = { (MojangSkinFragment().go()) })
 
 
             }
