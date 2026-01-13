@@ -31,7 +31,14 @@ data class UpdateProfileResult(
     val httpStatus: Int
 )
 
+data class LoggedAccount(
+    var id: String = "",
+    var qq: String = ""
+)
+
 object RServer {
+    val loggedAccount = LoggedAccount()
+
     suspend fun register(username: String, password: String, qq: String): RegisterResult {
         val response = httpRequest {
             url("$SERVER_URL/player/register")

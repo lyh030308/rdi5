@@ -1,7 +1,6 @@
 package calebxzhou.rdi.client.frag
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,7 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
@@ -30,6 +28,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import calebxzhou.rdi.client.misc.collectHardwareSpec
+import calebxzhou.rdi.client.misc.headButton
+import calebxzhou.rdi.client.net.RServer
 
 @Composable
 fun ProfileFragment(
@@ -44,6 +45,9 @@ fun ProfileFragment(
     hwSpec: Map<String, String> = emptyMap()
 ) {
     val errorMessage = remember { mutableStateOf<String?>(null) }
+    val resolvedHwSpec = remember(hwSpec) {
+        if (hwSpec.isEmpty()) collectHardwareSpec() else hwSpec
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Image(
@@ -111,21 +115,15 @@ fun ProfileFragment(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(72.dp)
-                            .background(Color(0xFF2E7D32), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = userId.take(2).uppercase(),
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp
-                        )
-                    }
+                    val accountId = RServer.loggedAccount.id.ifBlank { userId }
+                    val accountQq = RServer.loggedAccount.qq.ifBlank { userId }
+                    headButton(
+                        userId = accountId,
+                        size = 72.dp,
+                        backgroundColor = Color(0xFF2E7D32)
+                    )
                     Column {
-                        Text(text = "ID: $userId", color = Color.White.copy(alpha = 0.85f))
+                        Text(text = accountQq, color = Color.White.copy(alpha = 0.85f))
                     }
                     Spacer(modifier = Modifier.weight(1f))
                     Button(
@@ -161,13 +159,13 @@ fun ProfileFragment(
                             fontSize = 16.sp
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        if (hwSpec.isEmpty()) {
+                        if (resolvedHwSpec.isEmpty()) {
                             Text(
                                 text = "暂无硬件信息",
                                 color = Color.White.copy(alpha = 0.7f)
                             )
                         } else {
-                            hwSpec.forEach { (key, value) ->
+                            resolvedHwSpec.forEach { (key, value) ->
                                 Text(
                                     text = "$key: $value",
                                     color = Color.White.copy(alpha = 0.85f)
@@ -176,36 +174,30 @@ fun ProfileFragment(
                         }
                     }
                 }
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Button(
+                        onClick = {
+                            errorMessage.value = null
+                            onLobby()
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            backgroundColor = if (hasMcResources) Color(0xFF2E7D32) else Color(0xFF455A64),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Text("▶ 大厅")
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    errorMessage.value?.let { msg ->
+                        Text(text = msg, color = Color(0xFFFF7043))
+                    }
+                }
             }
         }
 
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Button(
-                onClick = {
-                    if (hasMcResources) {
-                        errorMessage.value = null
-                        onLobby()
-                    } else {
-                        errorMessage.value =
-                            "你还没有完整下载MC文件，必须下载才能游玩RDI，可点击上方“MC版本资源”按钮下载。"
-                    }
-                },
-                colors = ButtonDefaults.buttonColors(
-                    backgroundColor = if (hasMcResources) Color(0xFF2E7D32) else Color(0xFF455A64),
-                    contentColor = Color.White
-                )
-            ) {
-                Text("▶ 大厅")
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            errorMessage.value?.let { msg ->
-                Text(text = msg, color = Color(0xFFFF7043))
-            }
-        }
     }
 }

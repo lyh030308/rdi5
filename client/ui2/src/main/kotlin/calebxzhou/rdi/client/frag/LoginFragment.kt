@@ -78,19 +78,35 @@ fun LoginFragment(onRegister: () -> Unit, onBack: () -> Unit) {
                 isLoading = false
             }.onSuccess { response ->
                 val parsed = response.response
-                if (response.httpStatus in 200..299 && parsed?.ok == true) {
-                    successMessage = parsed.msg.ifBlank { "登录成功" }
-                    val displayName = parsed.data
-                        ?.jsonObject
-                        ?.get("name")
-                        ?.jsonPrimitive
-                        ?.content
-                        ?.ifBlank { username }
-                        ?: username
-                    NavState.currentUserId.value = displayName.ifBlank { "玩家" }
-                    NavState.currentJwt.value = response.jwt.orEmpty()
-                    NavState.currentScreen.value = "profile"
-                } else {
+                                    if (response.httpStatus in 200..299 && parsed?.ok == true) {
+                                        successMessage = parsed.msg.ifBlank { "登录成功" }
+                                        val displayName = parsed.data
+                                            ?.jsonObject
+                                            ?.get("name")
+                                            ?.jsonPrimitive
+                                            ?.content
+                                            ?.ifBlank { username }
+                                            ?: username
+                                        val accountId = parsed.data
+                                            ?.jsonObject
+                                            ?.get("_id")
+                                            ?.jsonPrimitive
+                                            ?.content
+                                            ?.ifBlank { displayName }
+                                            ?: displayName
+                                        val accountQq = parsed.data
+                                            ?.jsonObject
+                                            ?.get("qq")
+                                            ?.jsonPrimitive
+                                            ?.content
+                                            ?.ifBlank { username }
+                                            ?: username
+                                        NavState.currentUserId.value = displayName.ifBlank { "玩家" }
+                                        NavState.currentJwt.value = response.jwt.orEmpty()
+                                        RServer.loggedAccount.id = accountId
+                                        RServer.loggedAccount.qq = accountQq
+                                        NavState.currentScreen.value = "profile"
+                                    } else {
                     val serverMsg = parsed?.msg.orEmpty()
                     val isQqInput = username.all { it.isDigit() } && username.length in 5..10
                     errorMessage = if (isQqInput && serverMsg.contains("密码错误")) {

@@ -4,6 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,9 +13,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.AlertDialog
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
@@ -35,9 +39,18 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import calebxzhou.rdi.client.NavState
 import calebxzhou.rdi.client.SERVER_URL
@@ -55,9 +68,14 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import java.net.URLEncoder
+import java.net.URL
+import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
+import org.jetbrains.skia.Image as SkiaImage
 
 private val logger = KotlinLogging.logger {}
 
@@ -98,7 +116,7 @@ data class Skin(
 @Composable
 fun WardrobeFragment(onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
-    val listState = rememberLazyListState()
+    val gridState = rememberLazyGridState()
     var searchText by remember { mutableStateOf("") }
     var capeMode by remember { mutableStateOf(false) }
     var skins by remember { mutableStateOf<List<SkinData>>(emptyList()) }
@@ -108,6 +126,7 @@ fun WardrobeFragment(onBack: () -> Unit) {
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var selectedSkin by remember { mutableStateOf<SkinData?>(null) }
     var showConfirm by remember { mutableStateOf(false) }
+    val imageCache = remember { ConcurrentHashMap<String, ImageBitmap?>() }
 
     fun refreshSkins() {
         if (loading) return
@@ -158,7 +177,7 @@ fun WardrobeFragment(onBack: () -> Unit) {
 
     val shouldLoadMore by remember {
         derivedStateOf {
-            val layoutInfo = listState.layoutInfo
+            val layoutInfo = gridState.layoutInfo
             val total = layoutInfo.totalItemsCount
             val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
             total > 0 && lastVisible >= total - 1
@@ -171,7 +190,7 @@ fun WardrobeFragment(onBack: () -> Unit) {
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         Image(
             painter = painterResource("/assets/textures/bg/1.jpg"),
             contentDescription = "Background Image",
@@ -179,10 +198,16 @@ fun WardrobeFragment(onBack: () -> Unit) {
             modifier = Modifier.fillMaxSize()
         )
 
+        val panelRatio = 820f / 560f
+        val maxPanelWidth = maxWidth * 0.92f
+        val maxPanelHeight = maxHeight * 0.88f
+        val panelWidth = minOf(maxPanelWidth, maxPanelHeight * panelRatio)
+        val panelHeight = panelWidth / panelRatio
+
         Surface(
             modifier = Modifier
-                .width(820.dp)
-                .height(560.dp)
+                .width(panelWidth)
+                .height(panelHeight)
                 .align(Alignment.Center),
             color = Color.Black.copy(alpha = 0.6f),
             shape = RoundedCornerShape(16.dp)
@@ -219,7 +244,19 @@ fun WardrobeFragment(onBack: () -> Unit) {
                         value = searchText,
                         onValueChange = { searchText = it },
                         label = { Text("搜索...", color = Color(0xFF34C759)) },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .onKeyEvent { event ->
+                                if (event.type == KeyEventType.KeyUp && event.key == Key.Enter) {
+                                    refreshSkins()
+                                    true
+                                } else {
+                                    false
+                                }
+                            },
+                        singleLine = true,
+                        maxLines = 1,
+                        keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Search),
                         colors = TextFieldDefaults.outlinedTextFieldColors(
                             textColor = Color.White,
                             cursorColor = Color.White
@@ -243,64 +280,53 @@ fun WardrobeFragment(onBack: () -> Unit) {
                     ) {
                         Text("导入正版")
                     }
-                    Button(
-                        onClick = { refreshSkins() },
-                        enabled = !loading,
-                        colors = ButtonDefaults.buttonColors(
-                            backgroundColor = Color(0xFF2196F3),
-                            contentColor = Color.White
-                        )
-                    ) {
-                        Text("搜索")
-                    }
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                LazyColumn(
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(120.dp),
                     modifier = Modifier.weight(1f),
-                    state = listState,
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    state = gridState,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(skins.size) { index ->
-                        val skin = skins[index]
+                    items(skins, key = { it.tid }) { skin ->
                         Surface(
                             shape = RoundedCornerShape(10.dp),
                             color = Color.Black.copy(alpha = 0.35f),
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.width(170.dp)
                         ) {
-                            Row(
+                            Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                    .padding(10.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = skin.name,
-                                        color = Color.White,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = if (skin.isCape) "披风" else "皮肤",
-                                        color = Color.White.copy(alpha = 0.7f)
-                                    )
-                                    Text(
-                                        text = "Likes: ${skin.likes}",
-                                        color = Color.White.copy(alpha = 0.7f)
-                                    )
-                                }
-                                Button(
-                                    onClick = {
-                                        selectedSkin = skin
-                                        showConfirm = true
-                                    },
-                                    colors = ButtonDefaults.buttonColors(
-                                        backgroundColor = Color(0xFF4CAF50),
-                                        contentColor = Color.White
-                                    )
+                                SkinPreviewImage(
+                                    url = skinPreviewUrl(skin),
+                                    cache = imageCache,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(140.dp)
+                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text("设定")
+                                    Text(
+                                        text = skin.name.take(4),
+                                        color = Color.White,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1
+                                    )
+                                    Text(
+                                        text = "\u2665${skin.likes}",
+                                        color = Color.White.copy(alpha = 0.85f),
+                                        fontWeight = FontWeight.SemiBold
+                                    )
                                 }
                             }
                         }
@@ -367,6 +393,58 @@ private suspend fun querySkins(page: Int, keyword: String, cape: Boolean): List<
         }
     }
     return datas
+}
+
+@Composable
+private fun SkinPreviewImage(
+    url: String,
+    cache: MutableMap<String, ImageBitmap?>,
+    modifier: Modifier = Modifier
+) {
+    var image by remember(url) { mutableStateOf(cache[url]) }
+
+    LaunchedEffect(url) {
+        if (image == null) {
+            image = loadImageBitmap(url)
+            cache[url] = image
+        }
+    }
+
+    if (image != null) {
+        Image(
+            bitmap = image!!,
+            contentDescription = "Skin Preview",
+            contentScale = ContentScale.Fit,
+            modifier = modifier
+        )
+    } else {
+        Box(
+            modifier = modifier,
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "加载中",
+                color = Color.White.copy(alpha = 0.6f),
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+private fun skinPreviewUrl(skin: SkinData): String {
+    val base = "https://littleskin.cn"
+    return if (skin.isCape) {
+        "$base/preview/cape/${skin.tid}"
+    } else {
+        "$base/preview/${skin.tid}"
+    }
+}
+
+private suspend fun loadImageBitmap(url: String): ImageBitmap? = withContext(Dispatchers.IO) {
+    runCatching {
+        val bytes = URL(url).openStream().use { it.readBytes() }
+        SkiaImage.makeFromEncoded(bytes).asImageBitmap()
+    }.getOrNull()
 }
 
 private suspend fun setSkin(skinData: SkinData, onStatus: (String) -> Unit) {
